@@ -1,0 +1,5 @@
+.env
+.access_token
+venv/
+__pycache__/
+*.pyc
