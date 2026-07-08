@@ -41,9 +41,7 @@ def buy(request: BuyOrderRequest) -> BuyOrderResponse:
     if request.order_type == "LIMIT":
         params["price"] = request.price
     else:
-        params["market_protection"] = (
-            request.market_protection if request.market_protection is not None else -1
-        )
+        params["market_protection"] = -1
 
     #client
     order_id = kite.place_order(**params)

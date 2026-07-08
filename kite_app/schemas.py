@@ -8,8 +8,8 @@ class BuyOrderRequest(BaseModel):
     qty: int
     order_type: Literal["MARKET", "LIMIT"] = "MARKET"
     price: Optional[float] = None
-    # Required by Kite for MARKET orders. -1 = system-default automatic
-    # protection; 0-100 = explicit percentage. Ignored for LIMIT orders.
+    # Accepted but currently unused — market_protection is hardcoded to -1
+    # in orders.py regardless of what's passed here.
     # market_protection: Optional[float] = None
 
 
