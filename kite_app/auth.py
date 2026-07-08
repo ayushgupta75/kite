@@ -9,11 +9,13 @@ from kite_app.kite_client import cache_access_token
 
 router = APIRouter()
 
+def checkKeysExists():
+    if not API_KEY or not API_SECRET:
+        raise HTTPException(status_code=500, detail="KITE_API_KEY / KITE_API_SECRET not found. Create a .env file.")
 
 @router.get("/login")
 def login() -> RedirectResponse:
-    if not API_KEY or not API_SECRET:
-        raise HTTPException(status_code=500, detail="KITE_API_KEY / KITE_API_SECRET not found. Create a .env file.")
+    checkKeysExists()
     kite = KiteConnect(api_key=API_KEY)
     return RedirectResponse(kite.login_url())
 
@@ -30,6 +32,8 @@ def callback(request_token: str = Query(...), status: Optional[str] = Query(None
         session = kite.generate_session(request_token, api_secret=API_SECRET)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Login failed: {e}")
+    
+    print(f"{session} - new one")
 
     cache_access_token(session["access_token"])
     print("[callback] logged in, access token cached.")

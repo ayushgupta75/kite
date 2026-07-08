@@ -36,6 +36,14 @@ class GttPreviewResponse(BaseModel):
     sl_price: float
 
 
+class PriceGttPreviewResponse(BaseModel):
+    price: float
+    target_pct: float
+    sl_pct: float
+    target_price: float
+    sl_price: float
+
+
 class GttRequest(BaseModel):
     target_pct: float
     sl_pct: float

@@ -11,6 +11,7 @@ from kite_app.schemas import (
     GttRequest,
     GttResponse,
     OrderStatusResponse,
+    PriceGttPreviewResponse,
 )
 from kite_app.store import get_order, seed_order, update_from_postback
 
@@ -85,6 +86,18 @@ def _compute_prices(entry_price: float, target_pct: float, sl_pct: float) -> tup
     target_price = round_to_tick(entry_price * (1 + target_pct / 100))
     sl_price = round_to_tick(entry_price * (1 - sl_pct / 100))
     return target_price, sl_price
+
+
+@router.get("/gtt-preview", response_model=PriceGttPreviewResponse)
+def gtt_preview_from_price(price: float, target_pct: float, sl_pct: float) -> PriceGttPreviewResponse:
+    target_price, sl_price = _compute_prices(price, target_pct, sl_pct)
+    return PriceGttPreviewResponse(
+        price=price,
+        target_pct=target_pct,
+        sl_pct=sl_pct,
+        target_price=target_price,
+        sl_price=sl_price,
+    )
 
 
 @router.get("/orders/{order_id}/gtt-preview", response_model=GttPreviewResponse)

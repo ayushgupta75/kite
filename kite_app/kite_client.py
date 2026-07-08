@@ -31,5 +31,6 @@ def get_kite() -> KiteConnect:
 
 
 def cache_access_token(access_token: str) -> None:
+    # print(f"{access_token} - new one")
     with open(TOKEN_FILE, "w") as f:
         f.write(access_token)
