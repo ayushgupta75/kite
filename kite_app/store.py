@@ -19,6 +19,7 @@ def seed_order(order_id: str, symbol: str, qty: int) -> None:
 
 def update_from_postback(payload: dict) -> None:
     order_id = payload["order_id"]
+    
     entry = ORDER_STORE.setdefault(order_id, {
         "order_id": order_id,
         "symbol": payload.get("tradingsymbol"),
@@ -26,6 +27,7 @@ def update_from_postback(payload: dict) -> None:
         "average_price": None,
         "status_message": None,
     })
+
     entry["status"] = payload.get("status")
     if payload.get("average_price"):
         entry["average_price"] = float(payload["average_price"])

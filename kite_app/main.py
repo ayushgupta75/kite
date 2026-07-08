@@ -17,7 +17,8 @@ Run with: uvicorn kite_app.main:app --reload
 
 from fastapi import FastAPI
 
-from kite_app import auth, orders
+from kite_app import auth
+from kite_app.orders import orders
 
 app = FastAPI(title="Kite Trading API", swagger_ui_parameters={"tryItOutEnabled": True})
 app.include_router(auth.router)

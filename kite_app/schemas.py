@@ -10,7 +10,7 @@ class BuyOrderRequest(BaseModel):
     price: Optional[float] = None
     # Required by Kite for MARKET orders. -1 = system-default automatic
     # protection; 0-100 = explicit percentage. Ignored for LIMIT orders.
-    market_protection: Optional[float] = None
+    # market_protection: Optional[float] = None
 
 
 class BuyOrderResponse(BaseModel):

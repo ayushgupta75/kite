@@ -9,7 +9,7 @@ API_SECRET = os.getenv("KITE_API_SECRET")
 
 TOKEN_FILE = ".access_token"   # cached for the day, next to this script
 TICK_SIZE = 0.05               # standard NSE equity tick size
-EXCHANGE = "NSE"
+EXCHANGE_NSE = "NSE"
 PRODUCT = "CNC"                # per your setup: delivery/equity trades
 
 
