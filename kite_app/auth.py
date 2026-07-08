@@ -15,7 +15,6 @@ def login() -> RedirectResponse:
     if not API_KEY or not API_SECRET:
         raise HTTPException(status_code=500, detail="KITE_API_KEY / KITE_API_SECRET not found. Create a .env file.")
     kite = KiteConnect(api_key=API_KEY)
-    print(RedirectResponse(kite.login_url()))
     return RedirectResponse(kite.login_url())
 
 
