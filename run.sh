@@ -12,4 +12,6 @@ TUNNEL_PID=$!
 venv/bin/uvicorn kite_app.main:app --reload &
 SERVER_PID=$!
 
-wait -n
+while kill -0 "$SERVER_PID" 2>/dev/null && kill -0 "$TUNNEL_PID" 2>/dev/null; do
+  sleep 1
+done

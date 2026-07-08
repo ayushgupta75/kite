@@ -54,6 +54,7 @@ def buy(request: BuyOrderRequest) -> BuyOrderResponse:
 
 @router.post("/postback")
 async def postback(request: Request) -> dict:
+    print("------------------------Recieved from KITE----------------------------------")
     payload = await request.json()
     order_id = payload.get("order_id")
     order_timestamp = payload.get("order_timestamp")
