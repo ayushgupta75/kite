@@ -1,0 +1,6 @@
+target/
+.idea/
+*.iml
+.vscode/
+.access_token
+.env

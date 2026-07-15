@@ -1,12 +1,21 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
+from enum import Enum
+
+# Simple Enum
+class OrderType(Enum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+    AMO = "AMO"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
 
 class BuyOrderRequest(BaseModel):
     symbol: str
     qty: int
-    order_type: Literal["MARKET", "LIMIT"] = "MARKET"
+    order_type: OrderType = OrderType.MARKET
     price: Optional[float] = None
     # Accepted but currently unused — market_protection is hardcoded to -1
     # in orders.py regardless of what's passed here.

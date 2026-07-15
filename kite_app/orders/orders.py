@@ -1,6 +1,8 @@
 import hashlib
 
 from fastapi import APIRouter, HTTPException, Request
+from schemas import OrderType
+from order_service import buyStock
 
 from kite_app.config import API_SECRET, EXCHANGE_NSE, PRODUCT, round_to_tick
 from kite_app.kite_client import get_kite
@@ -21,35 +23,38 @@ router = APIRouter()
 @router.post("/orders/buy", response_model=BuyOrderResponse)
 def buy(request: BuyOrderRequest) -> BuyOrderResponse:
     #request logic
-    #tbd
-
-
-    # business logic
-    if request.order_type == "LIMIT" and request.price is None:
+    if request.order_type == OrderType.LIMIT and request.price is None:
         raise HTTPException(status_code=400, detail="price is required when order_type is LIMIT")
 
-    kite = get_kite()
-    params = dict(
-        variety=kite.VARIETY_REGULAR,
-        exchange=EXCHANGE_NSE,
-        tradingsymbol=request.symbol,
-        transaction_type=kite.TRANSACTION_TYPE_BUY,
-        quantity=request.qty,
-        product=PRODUCT,
-        order_type=request.order_type,
-    )
-    if request.order_type == "LIMIT":
-        params["price"] = request.price
-    else:
-        params["market_protection"] = -1
+    
+    return buyStock(request)
 
-    #client
-    order_id = kite.place_order(**params)
+    # business logic
+    # if request.order_type == OrderType.LIMIT and request.price is None:
+    #     raise HTTPException(status_code=400, detail="price is required when order_type is LIMIT")
 
-    #db
-    seed_order(order_id, request.symbol, request.qty)
+    # kite = get_kite()
+    # params = dict(
+    #     variety=kite.VARIETY_REGULAR,
+    #     exchange=EXCHANGE_NSE,
+    #     tradingsymbol=request.symbol,
+    #     transaction_type=kite.TRANSACTION_TYPE_BUY,
+    #     quantity=request.qty,
+    #     product=PRODUCT,
+    #     order_type=request.order_type,
+    # )
+    # if request.order_type == OrderType.LIMIT:
+    #     params["price"] = request.price
+    # else:
+    #     params["market_protection"] = -1
 
-    return BuyOrderResponse(order_id=order_id)
+    # #client
+    # order_id = kite.place_order(**params)
+
+    # #db
+    # seed_order(order_id, request.symbol, request.qty)
+
+    # return BuyOrderResponse(order_id=order_id)
 
 
 @router.post("/postback")
@@ -61,11 +66,11 @@ async def postback(request: Request) -> dict:
     checksum = payload.get("checksum")
     if not order_id or not order_timestamp or not checksum:
         raise HTTPException(status_code=400, detail="Malformed postback payload.")
-
-
+    print(f"order_id={order_id!r} order_timestamp={order_timestamp!r}")
     expected = hashlib.sha256(
         (order_id + order_timestamp + API_SECRET).encode("utf-8")
     ).hexdigest()
+    print(f"received={checksum} expected={expected} secret_len={len(API_SECRET or '')}")
     if checksum != expected:
         raise HTTPException(status_code=401, detail="Checksum mismatch.")
     
@@ -89,6 +94,7 @@ def order_status(order_id: str) -> OrderStatusResponse:
 @router.get("/gtt-preview", response_model=PriceGttPreviewResponse)
 def gtt_preview_from_price(price: float, target_pct: float, sl_pct: float) -> PriceGttPreviewResponse:
     target_price, sl_price = _compute_prices(price, target_pct, sl_pct)
+    
     return PriceGttPreviewResponse(
         price=price,
         target_pct=target_pct,
