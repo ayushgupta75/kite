@@ -81,6 +81,7 @@ public class controller {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(URI.create(frontendUrl + "/dashboard"))
                 .build();
+
     }
 
     private String requireLoggedIn(HttpSession session) {
