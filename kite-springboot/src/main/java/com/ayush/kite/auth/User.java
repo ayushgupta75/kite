@@ -12,7 +12,7 @@ import java.time.Instant;
 public class User {
 
     @Id
-    private String id; // email
+    private String id; // userId
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;

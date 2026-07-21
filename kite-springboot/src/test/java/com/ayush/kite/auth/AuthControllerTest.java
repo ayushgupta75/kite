@@ -27,32 +27,32 @@ class AuthControllerTest {
 
     @Test
     void signup_thenLogin_withCorrectPassword_succeeds() {
-        authController.signup(new AuthRequest("ayush@example.com", "correct-password"));
+        authController.signup(new AuthRequest("ayush", "correct-password"));
 
-        User stored = userRepository.findById("ayush@example.com").orElseThrow();
+        User stored = userRepository.findById("ayush").orElseThrow();
         assertThat(stored.getPasswordHash()).isNotEqualTo("correct-password");
 
         HttpSession session = mock(HttpSession.class);
-        authController.login(new AuthRequest("ayush@example.com", "correct-password"), session);
+        authController.login(new AuthRequest("ayush", "correct-password"), session);
 
-        verify(session).setAttribute("userId", "ayush@example.com");
+        verify(session).setAttribute("userId", "ayush");
     }
 
     @Test
     void login_withWrongPassword_throwsUnauthorized() {
-        authController.signup(new AuthRequest("ayush@example.com", "correct-password"));
+        authController.signup(new AuthRequest("ayush", "correct-password"));
 
         HttpSession session = mock(HttpSession.class);
-        assertThatThrownBy(() -> authController.login(new AuthRequest("ayush@example.com", "wrong-password"), session))
+        assertThatThrownBy(() -> authController.login(new AuthRequest("ayush", "wrong-password"), session))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("401");
     }
 
     @Test
-    void signup_duplicateEmail_throwsConflict() {
-        authController.signup(new AuthRequest("ayush@example.com", "password1"));
+    void signup_duplicateUserId_throwsConflict() {
+        authController.signup(new AuthRequest("ayush", "password1"));
 
-        assertThatThrownBy(() -> authController.signup(new AuthRequest("ayush@example.com", "password2")))
+        assertThatThrownBy(() -> authController.signup(new AuthRequest("ayush", "password2")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("409");
     }

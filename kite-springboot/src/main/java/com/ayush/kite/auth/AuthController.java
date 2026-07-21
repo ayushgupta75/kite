@@ -23,15 +23,16 @@ public class AuthController {
 
     @PostMapping("/auth/signup")
     public void signup(@RequestBody AuthRequest request) {
-        if (userRepository.existsById(request.email())) {
+        String userId = request.userId().toLowerCase();
+        if (userRepository.existsById(userId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User already exists.");
         }
-        userRepository.save(new User(request.email(), passwordEncoder.encode(request.password())));
+        userRepository.save(new User(userId, passwordEncoder.encode(request.password())));
     }
 
     @PostMapping("/auth/login")
     public void login(@RequestBody AuthRequest request, HttpSession session) {
-        User user = userRepository.findById(request.email())
+        User user = userRepository.findById(request.userId().toLowerCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials."));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
