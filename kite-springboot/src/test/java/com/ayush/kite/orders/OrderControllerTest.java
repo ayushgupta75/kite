@@ -1,6 +1,7 @@
 package com.ayush.kite.orders;
 
 import com.ayush.kite.client.KiteClientFactory;
+import com.ayush.kite.store.OrderRepository;
 import com.ayush.kite.store.OrderStore;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.utils.Constants;
@@ -11,6 +12,8 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,9 +26,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@DataJpaTest
 class OrderControllerTest {
 
     private static final String API_SECRET = "test-secret";
+
+    @Autowired
+    private OrderRepository orderRepository;
 
     private KiteClientFactory kiteClientFactory;
     private OrderStore orderStore;
@@ -36,7 +43,7 @@ class OrderControllerTest {
     @BeforeEach
     void setUp() {
         kiteClientFactory = mock(KiteClientFactory.class);
-        orderStore = new OrderStore();
+        orderStore = new OrderStore(orderRepository);
         kite = mock(KiteConnect.class);
         session = mock(HttpSession.class);
 
@@ -88,7 +95,8 @@ class OrderControllerTest {
         assertThat(params.price).isNull();
 
         assertThat(orderStore.get("order-123")).isPresent();
-        assertThat(orderStore.get("order-123").get().status()).isEqualTo("PENDING");
+        assertThat(orderStore.get("order-123").get().getUserId()).isEqualTo("ayush");
+        assertThat(orderStore.get("order-123").get().getStatus()).isEqualTo("PENDING");
     }
 
     @Test
@@ -131,7 +139,7 @@ class OrderControllerTest {
 
     @Test
     void postback_validChecksum_updatesStore() {
-        orderStore.seed("order-123", "INFY", 10);
+        orderStore.seed("order-123", "ayush", "INFY", 10);
 
         String orderId = "order-123";
         String orderTimestamp = "2026-07-21 10:00:00";
@@ -145,22 +153,44 @@ class OrderControllerTest {
                 "average_price", "1450.5"
         ));
 
-        assertThat(orderStore.get("order-123").get().status()).isEqualTo("COMPLETE");
-        assertThat(orderStore.get("order-123").get().averagePrice()).isEqualTo(1450.5);
+        assertThat(orderStore.get("order-123").get().getStatus()).isEqualTo("COMPLETE");
+        assertThat(orderStore.get("order-123").get().getAveragePrice()).isEqualTo(1450.5);
+    }
+
+    @Test
+    void getOrder_withoutLogin_throwsUnauthorized() {
+        when(session.getAttribute("userId")).thenReturn(null);
+
+        assertThatThrownBy(() -> controller.getOrder("order-123", session))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("401");
     }
 
     @Test
     void getOrder_unknown_throwsNotFound() {
-        assertThatThrownBy(() -> controller.getOrder("does-not-exist"))
+        when(session.getAttribute("userId")).thenReturn("ayush");
+
+        assertThatThrownBy(() -> controller.getOrder("does-not-exist", session))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+    }
+
+    @Test
+    void getOrder_ownedByDifferentUser_throwsNotFound() {
+        orderStore.seed("order-123", "someone-else", "INFY", 10);
+        when(session.getAttribute("userId")).thenReturn("ayush");
+
+        assertThatThrownBy(() -> controller.getOrder("order-123", session))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
     }
 
     @Test
     void getOrder_known_returnsStatus() {
-        orderStore.seed("order-123", "INFY", 10);
+        orderStore.seed("order-123", "ayush", "INFY", 10);
+        when(session.getAttribute("userId")).thenReturn("ayush");
 
-        OrderStatusResponse response = controller.getOrder("order-123");
+        OrderStatusResponse response = controller.getOrder("order-123", session);
 
         assertThat(response.orderId()).isEqualTo("order-123");
         assertThat(response.symbol()).isEqualTo("INFY");

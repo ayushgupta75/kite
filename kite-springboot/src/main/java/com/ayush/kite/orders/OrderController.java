@@ -70,7 +70,7 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Order placement failed: " + e.getMessage());
         }
 
-        orderStore.seed(response.orderId, request.symbol(), request.qty());
+        orderStore.seed(response.orderId, userId, request.symbol(), request.qty());
 
         return new BuyOrderResponse(response.orderId);
     }
@@ -94,12 +94,15 @@ public class OrderController {
     }
 
     @GetMapping("/orders/{orderId}")
-    public OrderStatusResponse getOrder(@PathVariable String orderId) {
+    public OrderStatusResponse getOrder(@PathVariable String orderId, HttpSession session) {
+        String userId = requireLoggedIn(session);
+
         OrderRecord record = orderStore.get(orderId)
+                .filter(r -> userId.equals(r.getUserId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown order_id."));
 
-        return new OrderStatusResponse(record.orderId(), record.symbol(), record.qty(), record.status(),
-                record.averagePrice(), record.statusMessage());
+        return new OrderStatusResponse(record.getOrderId(), record.getSymbol(), record.getQty(), record.getStatus(),
+                record.getAveragePrice(), record.getStatusMessage());
     }
 
     private String requireLoggedIn(HttpSession session) {
