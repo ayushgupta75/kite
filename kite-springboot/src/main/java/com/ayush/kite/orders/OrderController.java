@@ -1,13 +1,18 @@
 package com.ayush.kite.orders;
 
 import com.ayush.kite.client.KiteClientFactory;
+import com.ayush.kite.store.GttRecord;
+import com.ayush.kite.store.GttRepository;
 import com.ayush.kite.store.OrderRecord;
 import com.ayush.kite.store.OrderStore;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.kiteconnect.utils.Constants;
+import com.zerodhatech.models.GTT;
+import com.zerodhatech.models.GTTParams;
 import com.zerodhatech.models.OrderParams;
 import com.zerodhatech.models.OrderResponse;
+import com.zerodhatech.models.Quote;
 import jakarta.servlet.http.HttpSession;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.json.JSONException;
@@ -17,10 +22,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -31,10 +38,12 @@ public class OrderController {
 
     private final KiteClientFactory kiteClientFactory;
     private final OrderStore orderStore;
+    private final GttRepository gttRepository;
 
-    public OrderController(KiteClientFactory kiteClientFactory, OrderStore orderStore) {
+    public OrderController(KiteClientFactory kiteClientFactory, OrderStore orderStore, GttRepository gttRepository) {
         this.kiteClientFactory = kiteClientFactory;
         this.orderStore = orderStore;
+        this.gttRepository = gttRepository;
     }
 
     @PostMapping("/orders/buy")
@@ -103,6 +112,90 @@ public class OrderController {
 
         return new OrderStatusResponse(record.getOrderId(), record.getSymbol(), record.getQty(), record.getStatus(),
                 record.getAveragePrice(), record.getStatusMessage());
+    }
+
+    @GetMapping("/orders/{orderId}/gtt-preview")
+    public GttPreviewResponse gttPreview(@PathVariable String orderId, @RequestParam double targetPct,
+                                          @RequestParam double slPct, HttpSession session) {
+        String userId = requireLoggedIn(session);
+        OrderRecord record = requireFilledOwnedOrder(orderId, userId);
+
+        KiteConnect kite = kiteClientFactory.forUser(userId);
+        Quote quote = fetchQuote(kite, record.getSymbol());
+
+        double entryPrice = record.getAveragePrice();
+        double targetPrice = GttPricing.targetPrice(entryPrice, targetPct);
+        double slPrice = GttPricing.slPrice(entryPrice, slPct);
+
+        return new GttPreviewResponse(orderId, entryPrice, quote.lastPrice, targetPct, slPct, targetPrice, slPrice);
+    }
+
+    @PostMapping("/orders/{orderId}/gtt")
+    public GttResponse placeGtt(@PathVariable String orderId, @RequestBody GttRequest request, HttpSession session) {
+        String userId = requireLoggedIn(session);
+        OrderRecord record = requireFilledOwnedOrder(orderId, userId);
+
+        KiteConnect kite = kiteClientFactory.forUser(userId);
+        Quote quote = fetchQuote(kite, record.getSymbol());
+
+        double entryPrice = record.getAveragePrice();
+        double targetPrice = GttPricing.targetPrice(entryPrice, request.targetPct());
+        double slPrice = GttPricing.slPrice(entryPrice, request.slPct());
+
+        GTTParams params = new GTTParams();
+        params.tradingsymbol = record.getSymbol();
+        params.exchange = Constants.EXCHANGE_NSE;
+        params.instrumentToken = (int) quote.instrumentToken;
+        params.triggerType = Constants.OCO;
+        params.lastPrice = quote.lastPrice;
+        params.triggerPrices = List.of(targetPrice, slPrice);
+
+        GTTParams.GTTOrderParams targetLeg = params.new GTTOrderParams();
+        targetLeg.transactionType = Constants.TRANSACTION_TYPE_SELL;
+        targetLeg.quantity = record.getQty();
+        targetLeg.orderType = Constants.ORDER_TYPE_LIMIT;
+        targetLeg.product = Constants.PRODUCT_CNC;
+        targetLeg.price = targetPrice;
+
+        GTTParams.GTTOrderParams slLeg = params.new GTTOrderParams();
+        slLeg.transactionType = Constants.TRANSACTION_TYPE_SELL;
+        slLeg.quantity = record.getQty();
+        slLeg.orderType = Constants.ORDER_TYPE_LIMIT;
+        slLeg.product = Constants.PRODUCT_CNC;
+        slLeg.price = slPrice;
+
+        params.orders = List.of(targetLeg, slLeg); // index-aligned with triggerPrices above
+
+        GTT result;
+        try {
+            result = kite.placeGTT(params);
+        } catch (KiteException | JSONException | IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "GTT placement failed: " + e.getMessage());
+        }
+
+        gttRepository.save(new GttRecord(result.id, orderId, userId, record.getSymbol(), targetPrice, slPrice));
+
+        return new GttResponse(result.id, targetPrice, slPrice);
+    }
+
+    private Quote fetchQuote(KiteConnect kite, String symbol) {
+        String key = Constants.EXCHANGE_NSE + ":" + symbol;
+        try {
+            return kite.getQuote(new String[]{key}).get(key);
+        } catch (KiteException | JSONException | IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to fetch quote: " + e.getMessage());
+        }
+    }
+
+    private OrderRecord requireFilledOwnedOrder(String orderId, String userId) {
+        OrderRecord record = orderStore.get(orderId)
+                .filter(r -> userId.equals(r.getUserId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown order_id."));
+
+        if (!"COMPLETE".equals(record.getStatus()) || record.getAveragePrice() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order is not filled yet (status=" + record.getStatus() + ").");
+        }
+        return record;
     }
 
     private String requireLoggedIn(HttpSession session) {
