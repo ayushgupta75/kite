@@ -95,16 +95,8 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Checksum mismatch.");
         }
 
-        orderStore.updateFromPostback(payload);
+        orderStore.updateOrderState(payload);
 
-        OrderRecord record = orderRepository.findById(orderId.toString())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown order_id."));
-
-        boolean filled = "COMPLETE".equals(record.getStatus()) && record.getAveragePrice() != null;
-        boolean hasGttPercentages = record.getTargetPct() != null && record.getSlPct() != null;
-        if (filled && hasGttPercentages) {
-            placeGttForOrder(record, record.getTargetPct(), record.getSlPct());
-        }
     }
 
     @GetMapping("/orders/{orderId}")
