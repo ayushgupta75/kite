@@ -51,7 +51,7 @@ class OrderControllerTest {
     @BeforeEach
     void setUp() {
         kiteClientFactory = mock(KiteClientFactory.class);
-        orderStore = new OrderStore(orderRepository);
+        orderStore = new OrderStore(orderRepository,kiteClientFactory,gttRepository);
         kite = mock(KiteConnect.class);
         session = mock(HttpSession.class);
 
@@ -238,7 +238,7 @@ class OrderControllerTest {
     @Test
     void gttPreview_filledOrder_computesPrices() throws Throwable {
         orderStore.seed("order-123", "ayush", "INFY", 10);
-        orderStore.updateFromPostback(Map.of("order_id", "order-123", "status", "COMPLETE", "average_price", "1000"));
+        orderStore.updateOrderState(Map.of("order_id", "order-123", "status", "COMPLETE", "average_price", "1000"));
 
         when(session.getAttribute("userId")).thenReturn("ayush");
         when(kiteClientFactory.forUser("ayush")).thenReturn(kite);
@@ -255,7 +255,7 @@ class OrderControllerTest {
     @Test
     void placeGtt_filledOrder_placesOcoGttAndPersistsRecord() throws Throwable {
         orderStore.seed("order-123", "ayush", "INFY", 10);
-        orderStore.updateFromPostback(Map.of("order_id", "order-123", "status", "COMPLETE", "average_price", "1000"));
+        orderStore.updateOrderState(Map.of("order_id", "order-123", "status", "COMPLETE", "average_price", "1000"));
 
         when(session.getAttribute("userId")).thenReturn("ayush");
         when(kiteClientFactory.forUser("ayush")).thenReturn(kite);

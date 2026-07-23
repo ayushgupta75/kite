@@ -1,5 +1,6 @@
 package com.ayush.kite.store;
 
+import com.ayush.kite.client.KiteClientFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 @DataJpaTest
 class OrderStoreTest {
@@ -16,10 +18,14 @@ class OrderStoreTest {
     private OrderRepository orderRepository;
 
     private OrderStore store;
+    private KiteClientFactory kiteClientFactory;
+    @Autowired
+    private GttRepository gttRepository;
 
     @BeforeEach
     void setUp() {
-        store = new OrderStore(orderRepository);
+        kiteClientFactory = mock(KiteClientFactory.class);
+        store = new OrderStore(orderRepository, kiteClientFactory, gttRepository);
     }
 
     @Test
@@ -35,10 +41,10 @@ class OrderStoreTest {
     }
 
     @Test
-    void updateFromPostback_updatesStatusAndAveragePrice() {
+    void updateOrderState_updatesStatusAndAveragePrice() {
         store.seed("order-1", "ayush", "INFY", 10);
 
-        store.updateFromPostback(Map.of(
+        store.updateOrderState(Map.of(
                 "order_id", "order-1",
                 "status", "COMPLETE",
                 "average_price", "1450.5"
@@ -52,19 +58,19 @@ class OrderStoreTest {
     }
 
     @Test
-    void updateFromPostback_falsyAveragePrice_doesNotClobberExisting() {
+    void updateOrderState_falsyAveragePrice_doesNotClobberExisting() {
         store.seed("order-1", "ayush", "INFY", 10);
-        store.updateFromPostback(Map.of("order_id", "order-1", "status", "COMPLETE", "average_price", "1450.5"));
+        store.updateOrderState(Map.of("order_id", "order-1", "status", "COMPLETE", "average_price", "1450.5"));
 
-        store.updateFromPostback(Map.of("order_id", "order-1", "status", "COMPLETE", "average_price", "0"));
+        store.updateOrderState(Map.of("order_id", "order-1", "status", "COMPLETE", "average_price", "0"));
 
         OrderRecord record = store.get("order-1").orElseThrow();
         assertThat(record.getAveragePrice()).isEqualTo(1450.5);
     }
 
     @Test
-    void updateFromPostback_unseededOrder_createsEntryFromPayload() {
-        store.updateFromPostback(Map.of(
+    void updateOrderState_unseededOrder_createsEntryFromPayload() {
+        store.updateOrderState(Map.of(
                 "order_id", "order-2",
                 "tradingsymbol", "TCS",
                 "quantity", 5,
