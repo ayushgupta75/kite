@@ -1,10 +1,7 @@
 package com.ayush.kite.orders;
 
 import com.ayush.kite.client.KiteClientFactory;
-import com.ayush.kite.store.GttRecord;
-import com.ayush.kite.store.GttRepository;
-import com.ayush.kite.store.OrderRecord;
-import com.ayush.kite.store.OrderStore;
+import com.ayush.kite.store.*;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.kiteconnect.utils.Constants;
@@ -33,6 +30,7 @@ import java.util.Map;
 @RestController
 public class OrderController {
 
+    private final OrderRepository orderRepository;
     @Value("${kite.api-secret}")
     private String apiSecret;
 
@@ -40,19 +38,16 @@ public class OrderController {
     private final OrderStore orderStore;
     private final GttRepository gttRepository;
 
-    public OrderController(KiteClientFactory kiteClientFactory, OrderStore orderStore, GttRepository gttRepository) {
+    public OrderController(KiteClientFactory kiteClientFactory, OrderStore orderStore, GttRepository gttRepository, OrderRepository orderRepository) {
         this.kiteClientFactory = kiteClientFactory;
         this.orderStore = orderStore;
         this.gttRepository = gttRepository;
+        this.orderRepository = orderRepository;
     }
 
     @PostMapping("/orders/buy")
     public BuyOrderResponse buy(@RequestBody BuyOrderRequest request, HttpSession session) {
         String userId = requireLoggedIn(session);
-
-        if (request.orderType() == OrderType.LIMIT && request.price() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "price is required when orderType is LIMIT");
-        }
 
         KiteConnect kite = kiteClientFactory.forUser(userId);
 
@@ -64,13 +59,13 @@ public class OrderController {
         params.product = Constants.PRODUCT_CNC;
         params.validity = Constants.VALIDITY_DAY;
 
-        if (request.orderType() == OrderType.LIMIT) {
-            params.orderType = Constants.ORDER_TYPE_LIMIT;
-            params.price = request.price();
-        } else {
-            params.orderType = Constants.ORDER_TYPE_MARKET;
-            params.marketProtection = -1;
-        }
+//        if (request.orderType() == OrderType.LIMIT) {
+        params.orderType = Constants.ORDER_TYPE_LIMIT;
+        params.price = request.price();
+//        } else {
+//            params.orderType = Constants.ORDER_TYPE_MARKET;
+//            params.marketProtection = -1;
+//        }
 
         OrderResponse response;
         try {
@@ -80,6 +75,7 @@ public class OrderController {
         }
 
         orderStore.seed(response.orderId, userId, request.symbol(), request.qty());
+        orderStore.setGttPercentages(response.orderId, request.targetPct(), request.slPct());
 
         return new BuyOrderResponse(response.orderId);
     }
@@ -100,6 +96,15 @@ public class OrderController {
         }
 
         orderStore.updateFromPostback(payload);
+
+        OrderRecord record = orderRepository.findById(orderId.toString())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown order_id."));
+
+        boolean filled = "COMPLETE".equals(record.getStatus()) && record.getAveragePrice() != null;
+        boolean hasGttPercentages = record.getTargetPct() != null && record.getSlPct() != null;
+        if (filled && hasGttPercentages) {
+            placeGttForOrder(record, record.getTargetPct(), record.getSlPct());
+        }
     }
 
     @GetMapping("/orders/{orderId}")
@@ -134,13 +139,21 @@ public class OrderController {
     public GttResponse placeGtt(@PathVariable String orderId, @RequestBody GttRequest request, HttpSession session) {
         String userId = requireLoggedIn(session);
         OrderRecord record = requireFilledOwnedOrder(orderId, userId);
+        return placeGttForOrder(record, request.targetPct(), request.slPct());
+    }
 
+    // No HttpSession here on purpose: this is called both from the session-authenticated
+    // placeGtt() endpoint above and directly from postback() (a server-to-server webhook from
+    // Zerodha with no app session at all) - record.getUserId() is who actually owns the order
+    // regardless of who/what triggered this.
+    private GttResponse placeGttForOrder(OrderRecord record, double targetPct, double slPct) {
+        String userId = record.getUserId();
         KiteConnect kite = kiteClientFactory.forUser(userId);
         Quote quote = fetchQuote(kite, record.getSymbol());
 
         double entryPrice = record.getAveragePrice();
-        double targetPrice = GttPricing.targetPrice(entryPrice, request.targetPct());
-        double slPrice = GttPricing.slPrice(entryPrice, request.slPct());
+        double targetPrice = GttPricing.targetPrice(entryPrice, targetPct);
+        double slPrice = GttPricing.slPrice(entryPrice, slPct);
 
         GTTParams params = new GTTParams();
         params.tradingsymbol = record.getSymbol();
@@ -173,7 +186,7 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "GTT placement failed: " + e.getMessage());
         }
 
-        gttRepository.save(new GttRecord(result.id, orderId, userId, record.getSymbol(), targetPrice, slPrice));
+        gttRepository.save(new GttRecord(result.id, record.getOrderId(), userId, record.getSymbol(), targetPrice, slPrice));
 
         return new GttResponse(result.id, targetPrice, slPrice);
     }

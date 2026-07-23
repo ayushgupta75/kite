@@ -55,7 +55,7 @@ class OrderControllerTest {
         kite = mock(KiteConnect.class);
         session = mock(HttpSession.class);
 
-        controller = new OrderController(kiteClientFactory, orderStore, gttRepository);
+        controller = new OrderController(kiteClientFactory, orderStore, gttRepository,orderRepository);
         ReflectionTestUtils.setField(controller, "apiSecret", API_SECRET);
     }
 
@@ -70,22 +70,13 @@ class OrderControllerTest {
     void buy_withoutLogin_throwsUnauthorized() {
         when(session.getAttribute("userId")).thenReturn(null);
 
-        assertThatThrownBy(() -> controller.buy(new BuyOrderRequest("INFY", 1, OrderType.MARKET, null), session))
+        assertThatThrownBy(() -> controller.buy(new BuyOrderRequest("INFY", 1, OrderType.MARKET, 100.0, 3.0, 1.5), session))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("401");
     }
 
     @Test
-    void buy_limitWithoutPrice_throwsBadRequest() {
-        when(session.getAttribute("userId")).thenReturn("ayush");
-
-        assertThatThrownBy(() -> controller.buy(new BuyOrderRequest("INFY", 1, OrderType.LIMIT, null), session))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("400");
-    }
-
-    @Test
-    void buy_marketOrder_placesOrderWithMarketProtection() throws Throwable {
+    void buy_placesLimitOrderAndStoresGttPercentages() throws Throwable {
         when(session.getAttribute("userId")).thenReturn("ayush");
         when(kiteClientFactory.forUser("ayush")).thenReturn(kite);
 
@@ -93,7 +84,7 @@ class OrderControllerTest {
         orderResponse.orderId = "order-123";
         when(kite.placeOrder(any(OrderParams.class), eq(Constants.VARIETY_REGULAR))).thenReturn(orderResponse);
 
-        BuyOrderResponse response = controller.buy(new BuyOrderRequest("INFY", 10, OrderType.MARKET, null), session);
+        BuyOrderResponse response = controller.buy(new BuyOrderRequest("INFY", 10, OrderType.LIMIT, 1500.0, 3.0, 1.5), session);
 
         assertThat(response.orderId()).isEqualTo("order-123");
 
@@ -105,13 +96,14 @@ class OrderControllerTest {
         assertThat(params.transactionType).isEqualTo(Constants.TRANSACTION_TYPE_BUY);
         assertThat(params.quantity).isEqualTo(10);
         assertThat(params.product).isEqualTo(Constants.PRODUCT_CNC);
-        assertThat(params.orderType).isEqualTo(Constants.ORDER_TYPE_MARKET);
-        assertThat(params.marketProtection).isEqualTo(-1);
-        assertThat(params.price).isNull();
+        assertThat(params.orderType).isEqualTo(Constants.ORDER_TYPE_LIMIT);
+        assertThat(params.price).isEqualTo(1500.0);
 
         assertThat(orderStore.get("order-123")).isPresent();
         assertThat(orderStore.get("order-123").get().getUserId()).isEqualTo("ayush");
         assertThat(orderStore.get("order-123").get().getStatus()).isEqualTo("PENDING");
+        assertThat(orderStore.get("order-123").get().getTargetPct()).isEqualTo(3.0);
+        assertThat(orderStore.get("order-123").get().getSlPct()).isEqualTo(1.5);
     }
 
     @Test
@@ -123,7 +115,7 @@ class OrderControllerTest {
         orderResponse.orderId = "order-456";
         when(kite.placeOrder(any(OrderParams.class), eq(Constants.VARIETY_REGULAR))).thenReturn(orderResponse);
 
-        controller.buy(new BuyOrderRequest("TCS", 5, OrderType.LIMIT, 3500.0), session);
+        controller.buy(new BuyOrderRequest("TCS", 5, OrderType.LIMIT, 3500.0, 3.0, 1.5), session);
 
         ArgumentCaptor<OrderParams> captor = ArgumentCaptor.forClass(OrderParams.class);
         org.mockito.Mockito.verify(kite).placeOrder(captor.capture(), eq(Constants.VARIETY_REGULAR));
@@ -153,8 +145,15 @@ class OrderControllerTest {
     }
 
     @Test
-    void postback_validChecksum_updatesStore() {
+    void postback_validChecksum_updatesStoreAndPlacesGtt() throws Throwable {
         orderStore.seed("order-123", "ayush", "INFY", 10);
+        orderStore.setGttPercentages("order-123", 3.0, 1.5);
+
+        when(kiteClientFactory.forUser("ayush")).thenReturn(kite);
+        when(kite.getQuote(new String[]{"NSE:INFY"})).thenReturn(Map.of("NSE:INFY", quote(408065, 1010.0)));
+        GTT gttResult = new GTT();
+        gttResult.id = 777;
+        when(kite.placeGTT(any(GTTParams.class))).thenReturn(gttResult);
 
         String orderId = "order-123";
         String orderTimestamp = "2026-07-21 10:00:00";
@@ -170,6 +169,10 @@ class OrderControllerTest {
 
         assertThat(orderStore.get("order-123").get().getStatus()).isEqualTo("COMPLETE");
         assertThat(orderStore.get("order-123").get().getAveragePrice()).isEqualTo(1450.5);
+
+        GttRecord saved = gttRepository.findById(777).orElseThrow();
+        assertThat(saved.getOrderId()).isEqualTo("order-123");
+        assertThat(saved.getUserId()).isEqualTo("ayush");
     }
 
     @Test

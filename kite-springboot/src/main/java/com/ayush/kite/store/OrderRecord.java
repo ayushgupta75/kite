@@ -33,6 +33,12 @@ public class OrderRecord {
     @Column(name = "status_message")
     private String statusMessage;
 
+    @Column(name = "target_pct")
+    private Double targetPct;
+
+    @Column(name = "sl_pct")
+    private Double slPct;
+
     protected OrderRecord() {
     }
 
@@ -48,6 +54,11 @@ public class OrderRecord {
         this.status = status;
         this.averagePrice = averagePrice;
         this.statusMessage = statusMessage;
+    }
+
+    void setGttPercentages(double targetPct, double slPct) {
+        this.targetPct = targetPct;
+        this.slPct = slPct;
     }
 
     public String getOrderId() {
@@ -76,5 +87,13 @@ public class OrderRecord {
 
     public String getStatusMessage() {
         return statusMessage;
+    }
+
+    public Double getTargetPct() {
+        return targetPct;
+    }
+
+    public Double getSlPct() {
+        return slPct;
     }
 }

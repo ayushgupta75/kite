@@ -37,6 +37,13 @@ public class OrderStore {
         return orderRepository.findById(orderId);
     }
 
+    public void setGttPercentages(String orderId, double targetPct, double slPct) {
+        OrderRecord record = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown order_id=" + orderId));
+        record.setGttPercentages(targetPct, slPct);
+        orderRepository.save(record);
+    }
+
     private static int toInt(Object value) {
         return value == null ? 0 : ((Number) value).intValue();
     }
