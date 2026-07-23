@@ -33,7 +33,7 @@ public class AuthController {
     @PostMapping("/auth/login")
     public void login(@RequestBody AuthRequest request, HttpSession session) {
         User user = userRepository.findById(request.userId().toLowerCase())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials.");
