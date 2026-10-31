@@ -26,9 +26,9 @@ implementations over defensive engineering for cases that can't happen yet.
 
 Required environment variables (see `src/main/resources/application.properties`): `KITE_API_KEY`,
 `KITE_API_SECRET`, `DB_USERNAME`, `DB_PASSWORD`, and optionally `FRONTEND_URL` (defaults to
-`http://localhost:5173`). The app expects a local Postgres database named `kite` on the default port.
+`http://localhost:5173`). The app expects a local MySQL database named `kite` on the default port.
 
-Tests use an in-memory H2 database via `@DataJpaTest`, so `./mvnw test` does not require Postgres to be running.
+Tests use an in-memory H2 database via `@DataJpaTest`, so `./mvnw test` does not require MySQL to be running.
 
 ## Architecture
 
@@ -55,7 +55,7 @@ those first when orienting in an unfamiliar package):
   target/SL price math) — keep new pricing logic there and unit-tested directly, no mocking needed.
 - **`store`** — JPA-backed persistence for orders (`OrderRecord`/`OrderRepository`, wrapped by `OrderStore`)
   and GTT triggers (`GttRecord`/`GttRepository`). Note the `store` package-info still says "in-memory order
-  tracking" — that's stale; orders are Postgres-backed (see `spring.jpa.hibernate.ddl-auto=update`, which
+  tracking" — that's stale; orders are MySQL-backed (see `spring.jpa.hibernate.ddl-auto=update`, which
   auto-migrates the schema from entities — fine for now, but should become Flyway/Liquibase before this holds
   real user data).
 - **`config`** — `WebConfig` sets up CORS for `/auth/**` and `/orders/**`, scoped to `app.frontend.url` with
